@@ -120,5 +120,41 @@
 
 ---
 
+## Privacy Policy
+
+**VoiceVibe AI for Claude - Privacy Policy**
+
+Last Updated: January 15, 2026
+
+### Our Commitment
+VoiceVibe AI respects your privacy. We believe your conversations with Claude AI are private, and we've built this extension to keep them that way.
+
+### What We Collect
+Nothing. We collect zero data from users.
+
+### What We Access
+To function, VoiceVibe AI requires:
+- **Microphone Access** - To capture your voice input using your browser's Web Speech API
+- **Claude.ai Page Access** - To insert text and read Claude's responses
+- **Local Storage** - To save your settings (trigger phrase, hotkey preference, voice selection) on your device only
+
+### What We Don't Do
+- We don't record your voice
+- We don't store your conversations
+- We don't send any data to external servers
+- We don't use cookies or tracking
+- We don't collect analytics or usage statistics
+- We don't share anything with third parties (because we have nothing to share)
+---
+### How Your Data is Processed
+All speech recognition is handled by your browser's built-in Web Speech API. Your voice never leaves your device. Text-to-speech is also handled locally by your browser.
+
+When you speak, your browser converts speech to text. That text is inserted into Claude's input box - the same as if you had typed it. Your conversation with Claude follows Claude/Anthropic's privacy policy, not ours, because we never see it.
+
+### Contact
+Questions about privacy? Email voicevibeai@gmail.com
+
+### Open Source
+Our code is available for review on GitHub: https://github.com/voice-vibe-ai/voicevibe-claude
 **Version:** 1.0.0 (Hardened Prototype)
 **Last Updated:** January 2025
