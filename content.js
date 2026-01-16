@@ -12,6 +12,7 @@ let recognition = null;
 let synthesis = window.speechSynthesis;
 let lastTranscriptLength = 0;
 let currentTranscript = ''; // NEW: Store current transcript for hotkey access
+let silenceTimer = null;
 
 // Settings (loaded from storage)
 let readbackSpeed = 1.5;
@@ -337,8 +338,21 @@ function initRecognition() {
   };
   
   recognition.onresult = (event) => {
-    let fullTranscript = '';
-    for (let i = 0; i < event.results.length; i++) {
+  // Reset silence timer
+  if (silenceTimer) clearTimeout(silenceTimer);
+  silenceTimer = setTimeout(() => {
+    if (micActive && !isProcessing && isRecognitionRunning) {
+      console.log('Silence timeout - restart');
+      lastTranscriptLength = 0;
+      try { recognition.stop(); } catch (e) {}
+      setTimeout(() => {
+        if (micActive && !isProcessing) startListening();
+      }, 100);
+    }
+  }, 15000);
+  
+  let fullTranscript = '';
+  for (let i = 0; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
         fullTranscript += event.results[i][0].transcript + ' ';
       }
@@ -367,9 +381,34 @@ function initRecognition() {
   };
   
   recognition.onerror = (event) => {
-    console.log('Recognition Error:', event.error);
-    isRecognitionRunning = false;
-  };
+  console.log('Recognition Error:', event.error);
+  isRecognitionRunning = false;
+  
+  if (silenceTimer) {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  }
+  
+  if (event.error === 'no-speech') {
+    if (micActive && !isProcessing) {
+      lastTranscriptLength = 0;
+      try {
+        recognition.stop();
+        recognition.abort();
+      } catch (e) {}
+      setTimeout(() => {
+        if (micActive && !isProcessing) startListening();
+      }, 100);
+    }
+    return;
+  }
+  
+  if (event.error === 'network') {
+    if (micActive && !isProcessing) {
+      setTimeout(startListening, 2000);
+    }
+  }
+};
   
   recognition.onend = () => {
     isRecognitionRunning = false;
@@ -381,8 +420,24 @@ function initRecognition() {
 
 function startListening() {
   if (isRecognitionRunning) return;
+  
+  if (silenceTimer) {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  }
+  
   try {
     recognition.start();
+    
+    silenceTimer = setTimeout(() => {
+      if (micActive && !isProcessing && isRecognitionRunning) {
+        lastTranscriptLength = 0;
+        try { recognition.stop(); } catch (e) {}
+        setTimeout(() => {
+          if (micActive && !isProcessing) startListening();
+        }, 100);
+      }
+    }, 15000);
   } catch (e) {
     isRecognitionRunning = false;
   }
@@ -390,8 +445,15 @@ function startListening() {
 
 function stopListening() {
   if (!isRecognitionRunning) return;
+  
+  if (silenceTimer) {
+    clearTimeout(silenceTimer);
+    silenceTimer = null;
+  }
+  
   try {
     recognition.stop();
+    recognition.abort();
   } catch (e) {}
 }
 
@@ -457,6 +519,41 @@ function resetAfterTrigger() {
 
 // === SUBMIT MESSAGE ===
 async function submitMessage(text) {
+  try {
+    const textarea = document.querySelector('[contenteditable="true"]');
+    if (!textarea) return;
+    
+    textarea.innerHTML = '';
+    textarea.focus();
+    textarea.textContent = text;
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    await sleep(200);
+    
+    const sendBtn = document.querySelector('button[aria-label*="Send"]') || 
+                    document.querySelector('button[type="submit"]');
+    if (!sendBtn) return;
+    
+    sendBtn.click();
+    console.log('Message sent');
+    
+    // Extra clearing after send
+    await sleep(300);
+    textarea.blur();
+    textarea.innerHTML = '';
+    textarea.textContent = '';
+    
+    // One more clear after another delay
+    await sleep(500);
+    const textareaAgain = document.querySelector('[contenteditable="true"]');
+    if (textareaAgain) {
+      textareaAgain.innerHTML = '';
+      textareaAgain.textContent = '';
+    }
+  } catch (error) {
+    console.error('Submit error:', error);
+  }
+}async function submitMessage(text) {
   try {
     const textarea = document.querySelector('[contenteditable="true"]');
     if (!textarea) return;
