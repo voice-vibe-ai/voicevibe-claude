@@ -1,15 +1,16 @@
 // VoiceVibe AI - for Claude
-// Simplified version - no cumulative text tracking
+// Simplified version with collapsible panel
 
 console.log('VoiceVibe AI - Loaded');
 
-// === STATE (SIMPLIFIED) ===
+// === STATE ===
 let micActive = false;
 let isProcessing = false;
 let triggerDetected = false;
 let recognition = null;
 let synthesis = window.speechSynthesis;
 let silenceTimer = null;
+let panelExpanded = false; // Collapsed by default
 
 // Settings (loaded from storage)
 let readbackSpeed = 1.5;
@@ -91,6 +92,53 @@ function createMicButton() {
   return mic;
 }
 
+// === EXPAND/COLLAPSE TOGGLE ===
+function createExpandToggle() {
+  const toggle = document.createElement('div');
+  toggle.id = 'vf-expand';
+  toggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>';
+  toggle.style.cssText = `
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: 2px;
+  `;
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    togglePanelExpand();
+  });
+  toggle.addEventListener('mouseenter', () => toggle.style.opacity = '1');
+  toggle.addEventListener('mouseleave', () => toggle.style.opacity = '0.6');
+  return toggle;
+}
+
+// === COLLAPSIBLE SECTION (TTS CONTROLS) ===
+function createCollapsibleSection() {
+  const section = document.createElement('div');
+  section.id = 'vf-collapsible';
+  section.style.cssText = `
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    margin-top: 2px;
+  `;
+  
+  section.appendChild(createSpeakerToggle());
+  section.appendChild(createSpeedControl());
+  
+  return section;
+}
+
 // === SPEAKER BUTTON ===
 function createSpeakerToggle() {
   const speaker = document.createElement('div');
@@ -144,6 +192,27 @@ function createSpeedControl() {
     speed.style.transform = 'scale(1)';
   });
   return speed;
+}
+
+// === PANEL EXPAND/COLLAPSE ===
+function togglePanelExpand() {
+  panelExpanded = !panelExpanded;
+  
+  const collapsible = document.getElementById('vf-collapsible');
+  const toggle = document.getElementById('vf-expand');
+  
+  if (collapsible) {
+    collapsible.style.display = panelExpanded ? 'flex' : 'none';
+  }
+  
+  if (toggle) {
+    // Rotate arrow: down when collapsed, up when expanded
+    toggle.innerHTML = panelExpanded 
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>';
+  }
+  
+  console.log(panelExpanded ? 'Panel expanded' : 'Panel collapsed');
 }
 
 // === TOGGLE FUNCTIONS ===
@@ -244,7 +313,7 @@ function updatePanelPosition() {
   }
 }
 
-// === HOTKEY LISTENER (SIMPLIFIED) ===
+// === HOTKEY LISTENER ===
 function setupHotkeyListener() {
   document.addEventListener('keydown', (e) => {
     if (!hotkeyEnabled || !micActive || isProcessing) return;
@@ -276,8 +345,7 @@ function setupHotkeyListener() {
   console.log('Hotkey setup');
 }
 
-// === TEXT INSERTION (SIMPLIFIED) ===
-// Just insert the text at cursor - no cumulative tracking needed
+// === TEXT INSERTION ===
 function insertTextAtCursor(text) {
   if (!micActive || !text || !text.trim()) return;
   
@@ -292,7 +360,7 @@ function insertTextAtCursor(text) {
   console.log('Inserted:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
 }
 
-// === SPEECH RECOGNITION (SIMPLIFIED) ===
+// === SPEECH RECOGNITION ===
 function initRecognition() {
   if (!('webkitSpeechRecognition' in window)) {
     alert('Speech recognition not supported. Use Chrome.');
@@ -313,8 +381,7 @@ function initRecognition() {
     // Reset silence timer on any speech
     resetSilenceTimer();
     
-    // KEY CHANGE: Use resultIndex to only process NEW results
-    // This is how the API is designed to work - no manual tracking needed
+    // Use resultIndex to only process NEW results
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
         let transcript = event.results[i][0].transcript;
@@ -401,7 +468,6 @@ function startListening() {
   try {
     recognition.start();
   } catch (e) {
-    // Already started or other error - ignore
     console.log('Start error (usually harmless):', e.message);
   }
 }
@@ -735,7 +801,7 @@ function loadSettings() {
       selectedVoice 
     });
     
-    // Update speaker button
+    // Update speaker button if it exists
     const speaker = document.getElementById('vf-speaker');
     if (speaker) {
       const speakerOnSVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
@@ -745,7 +811,7 @@ function loadSettings() {
       speaker.style.background = readbackEnabled ? '#4caf50' : '#666';
     }
     
-    // Update speed display
+    // Update speed display if it exists
     const speedEl = document.getElementById('vf-speed');
     if (speedEl) speedEl.textContent = `${readbackSpeed}x`;
   });
@@ -758,12 +824,12 @@ function init() {
   loadSettings();
   initRecognition();
   
-  // Create panel
+  // Create panel with collapsible section
   const panel = createGlassPanel();
   panel.appendChild(createLogoText());
   panel.appendChild(createMicButton());
-  panel.appendChild(createSpeakerToggle());
-  panel.appendChild(createSpeedControl());
+  panel.appendChild(createCollapsibleSection());
+  panel.appendChild(createExpandToggle());
   
   setupHotkeyListener();
   
