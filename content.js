@@ -1,26 +1,23 @@
 // VoiceVibe AI - for Claude
-// Clean version with proper TTS handling
+// Simplified version - no cumulative text tracking
 
 console.log('VoiceVibe AI - Loaded');
 
-// === STATE ===
+// === STATE (SIMPLIFIED) ===
 let micActive = false;
 let isProcessing = false;
 let triggerDetected = false;
-let isRecognitionRunning = false;
 let recognition = null;
 let synthesis = window.speechSynthesis;
-let lastTranscriptLength = 0;
-let currentTranscript = ''; // NEW: Store current transcript for hotkey access
 let silenceTimer = null;
 
 // Settings (loaded from storage)
 let readbackSpeed = 1.5;
-let readbackEnabled = false; // Changed to false - default OFF
+let readbackEnabled = false;
 let hotkeyEnabled = true;
 let triggerPhrase = 'send it';
 let selectedHotkey = 'alt';
-let selectedVoice = 'auto'; // 'auto' or voice name
+let selectedVoice = 'auto';
 
 // UI positions
 let isDragging = false;
@@ -122,7 +119,7 @@ function createSpeakerToggle() {
   return speaker;
 }
 
-// === SPEED DISPLAY (text only) ===
+// === SPEED DISPLAY ===
 function createSpeedControl() {
   const speed = document.createElement('div');
   speed.id = 'vf-speed';
@@ -172,8 +169,7 @@ function toggleMic() {
   if (!micActive) {
     micActive = true;
     mic.style.background = '#d32f2f';
-    lastTranscriptLength = 0;
-    currentTranscript = ''; // Clear transcript when starting
+    // Prime TTS engine
     const silentUtterance = new SpeechSynthesisUtterance('');
     synthesis.speak(silentUtterance);
     startListening();
@@ -185,8 +181,6 @@ function toggleMic() {
     mic.style.background = '#666';
     stopListening();
     synthesis.cancel();
-    lastTranscriptLength = 0;
-    currentTranscript = ''; // Clear transcript when stopping
     console.log('Mic OFF');
   }
 }
@@ -250,7 +244,7 @@ function updatePanelPosition() {
   }
 }
 
-// === HOTKEY LISTENER - FIXED VERSION ===
+// === HOTKEY LISTENER (SIMPLIFIED) ===
 function setupHotkeyListener() {
   document.addEventListener('keydown', (e) => {
     if (!hotkeyEnabled || !micActive || isProcessing) return;
@@ -270,33 +264,9 @@ function setupHotkeyListener() {
       
       if (!triggerDetected) {
         triggerDetected = true;
-        
-        // Stop listening first
         stopListening();
         
-        // Get the textarea
-        const textarea = document.querySelector('[contenteditable="true"]');
-        if (!textarea) {
-          console.log('Hotkey: No textarea found');
-          triggerDetected = false;
-          return;
-        }
-        
-        // Check what's already in the textarea
-        const existingText = (textarea.textContent || '').trim();
-        
-        // If textarea is empty but we have a transcript, insert it
-        if (!existingText && currentTranscript && currentTranscript.trim()) {
-          console.log('Hotkey: Inserting transcript manually:', currentTranscript);
-          textarea.focus();
-          textarea.textContent = currentTranscript;
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          // CRITICAL: Clear transcript immediately to prevent re-insertion
-          currentTranscript = '';
-          lastTranscriptLength = 0;
-        }
-        
-        // Small delay for DOM to update, then process
+        // Small delay for any pending speech to finalize
         setTimeout(() => {
           handleTrigger();
         }, 200);
@@ -306,21 +276,23 @@ function setupHotkeyListener() {
   console.log('Hotkey setup');
 }
 
-// === TEXT INSERTION ===
-function insertNewText(fullTranscript) {
-  if (!micActive) return;
+// === TEXT INSERTION (SIMPLIFIED) ===
+// Just insert the text at cursor - no cumulative tracking needed
+function insertTextAtCursor(text) {
+  if (!micActive || !text || !text.trim()) return;
+  
   const textarea = document.querySelector('[contenteditable="true"]');
   if (!textarea) return;
   
-  const newText = fullTranscript.substring(lastTranscriptLength);
-  if (!newText) return;
+  if (document.activeElement !== textarea) {
+    textarea.focus();
+  }
   
-  if (document.activeElement !== textarea) textarea.focus();
-  document.execCommand('insertText', false, newText);
-  lastTranscriptLength = fullTranscript.length;
+  document.execCommand('insertText', false, text);
+  console.log('Inserted:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
 }
 
-// === SPEECH RECOGNITION ===
+// === SPEECH RECOGNITION (SIMPLIFIED) ===
 function initRecognition() {
   if (!('webkitSpeechRecognition' in window)) {
     alert('Speech recognition not supported. Use Chrome.');
@@ -333,128 +305,118 @@ function initRecognition() {
   recognition.lang = 'en-US';
   
   recognition.onstart = () => {
-    isRecognitionRunning = true;
-    console.log('Listening');
+    console.log('Listening started');
+    resetSilenceTimer();
   };
   
   recognition.onresult = (event) => {
-  // Reset silence timer
-  if (silenceTimer) clearTimeout(silenceTimer);
-  silenceTimer = setTimeout(() => {
-    if (micActive && !isProcessing && isRecognitionRunning) {
-      console.log('Silence timeout - restart');
-      lastTranscriptLength = 0;
-      try { recognition.stop(); } catch (e) {}
-      setTimeout(() => {
-        if (micActive && !isProcessing) startListening();
-      }, 100);
-    }
-  }, 15000);
-  
-  let fullTranscript = '';
-  for (let i = 0; i < event.results.length; i++) {
+    // Reset silence timer on any speech
+    resetSilenceTimer();
+    
+    // KEY CHANGE: Use resultIndex to only process NEW results
+    // This is how the API is designed to work - no manual tracking needed
+    for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        fullTranscript += event.results[i][0].transcript + ' ';
-      }
-    }
-    
-    // Store transcript globally for hotkey access
-    currentTranscript = fullTranscript;
-    
-    if (fullTranscript) {
-      console.log('Transcript:', fullTranscript);
-      
-      if (!triggerDetected && fullTranscript.toLowerCase().includes(triggerPhrase.toLowerCase())) {
-        console.log('TRIGGER!', triggerPhrase);
-        triggerDetected = true;
-        const regex = new RegExp(triggerPhrase, 'gi');
-        fullTranscript = fullTranscript.replace(regex, '').trim() + ' ';
-        if (fullTranscript.trim()) {
-          insertNewText(fullTranscript);
+        let transcript = event.results[i][0].transcript;
+        
+        if (!transcript || !transcript.trim()) continue;
+        
+        console.log('Transcript:', transcript);
+        
+        // Check for trigger phrase
+        if (!triggerDetected && transcript.toLowerCase().includes(triggerPhrase.toLowerCase())) {
+          console.log('TRIGGER!', triggerPhrase);
+          triggerDetected = true;
+          
+          // Remove trigger phrase from text
+          const regex = new RegExp(triggerPhrase, 'gi');
+          transcript = transcript.replace(regex, '').trim();
+          
+          // Insert any remaining text
+          if (transcript) {
+            insertTextAtCursor(transcript + ' ');
+          }
+          
+          handleTrigger();
+          return;
         }
-        handleTrigger();
-        return;
+        
+        // Normal speech - just insert it
+        insertTextAtCursor(transcript + ' ');
       }
-      
-      insertNewText(fullTranscript);
     }
   };
   
   recognition.onerror = (event) => {
-  console.log('Recognition Error:', event.error);
-  isRecognitionRunning = false;
-  
-  if (silenceTimer) {
-    clearTimeout(silenceTimer);
-    silenceTimer = null;
-  }
-  
-  if (event.error === 'no-speech') {
-    if (micActive && !isProcessing) {
-      lastTranscriptLength = 0;
-      try {
-        recognition.stop();
-        recognition.abort();
-      } catch (e) {}
-      setTimeout(() => {
-        if (micActive && !isProcessing) startListening();
-      }, 100);
+    console.log('Recognition error:', event.error);
+    clearSilenceTimer();
+    
+    if (event.error === 'no-speech') {
+      // Normal timeout, just restart if still active
+      if (micActive && !isProcessing) {
+        setTimeout(startListening, 100);
+      }
+      return;
     }
-    return;
-  }
-  
-  if (event.error === 'network') {
-    if (micActive && !isProcessing) {
-      setTimeout(startListening, 2000);
+    
+    if (event.error === 'network') {
+      // Network issue, wait longer before retry
+      if (micActive && !isProcessing) {
+        setTimeout(startListening, 2000);
+      }
     }
-  }
-};
+  };
   
   recognition.onend = () => {
-    isRecognitionRunning = false;
+    console.log('Recognition ended');
+    clearSilenceTimer();
+    
+    // Auto-restart if still active
     if (micActive && !isProcessing) {
-      setTimeout(startListening, 500);
+      setTimeout(startListening, 300);
     }
   };
 }
 
-function startListening() {
-  if (isRecognitionRunning) return;
-  
+function resetSilenceTimer() {
+  clearSilenceTimer();
+  silenceTimer = setTimeout(() => {
+    if (micActive && !isProcessing) {
+      console.log('Silence timeout - restarting');
+      try { recognition.stop(); } catch (e) {}
+    }
+  }, 15000);
+}
+
+function clearSilenceTimer() {
   if (silenceTimer) {
     clearTimeout(silenceTimer);
     silenceTimer = null;
   }
+}
+
+function startListening() {
+  if (!recognition) return;
   
   try {
     recognition.start();
-    
-    silenceTimer = setTimeout(() => {
-      if (micActive && !isProcessing && isRecognitionRunning) {
-        lastTranscriptLength = 0;
-        try { recognition.stop(); } catch (e) {}
-        setTimeout(() => {
-          if (micActive && !isProcessing) startListening();
-        }, 100);
-      }
-    }, 15000);
   } catch (e) {
-    isRecognitionRunning = false;
+    // Already started or other error - ignore
+    console.log('Start error (usually harmless):', e.message);
   }
 }
 
 function stopListening() {
-  if (!isRecognitionRunning) return;
+  if (!recognition) return;
   
-  if (silenceTimer) {
-    clearTimeout(silenceTimer);
-    silenceTimer = null;
-  }
+  clearSilenceTimer();
   
   try {
     recognition.stop();
     recognition.abort();
-  } catch (e) {}
+  } catch (e) {
+    // Not running - ignore
+  }
 }
 
 // === TRIGGER HANDLER ===
@@ -470,19 +432,16 @@ async function handleTrigger() {
     return;
   }
   
+  // Get text and clean up trigger phrase
   let fullText = textarea.textContent || '';
   const regex = new RegExp(triggerPhrase, 'gi');
   fullText = fullText.replace(regex, '').trim();
   
-  // Clear textarea immediately after reading
+  // Clear textarea
   textarea.innerHTML = '';
-  
-  lastTranscriptLength = 0;
-  currentTranscript = ''; // Clear transcript after processing
   
   if (!fullText) {
     console.log('No text to send');
-    textarea.innerHTML = '';
     resetAfterTrigger();
     return;
   }
@@ -491,17 +450,17 @@ async function handleTrigger() {
   setMicColor('#f9a825');
   await submitMessage(fullText);
   
-  // AGGRESSIVE CLEAR: Keep clearing the textarea for 2 seconds after sending
+  // Aggressive clear to prevent echo
   let clearAttempts = 0;
   const aggressiveClear = setInterval(() => {
-    const textarea = document.querySelector('[contenteditable="true"]');
-    if (textarea) {
-      textarea.innerHTML = '';
-      textarea.textContent = '';
-      textarea.blur();
+    const ta = document.querySelector('[contenteditable="true"]');
+    if (ta) {
+      ta.innerHTML = '';
+      ta.textContent = '';
+      ta.blur();
     }
     clearAttempts++;
-    if (clearAttempts >= 20) { // Clear 20 times over 2 seconds
+    if (clearAttempts >= 20) {
       clearInterval(aggressiveClear);
     }
   }, 100);
@@ -512,9 +471,10 @@ async function handleTrigger() {
 function resetAfterTrigger() {
   isProcessing = false;
   triggerDetected = false;
-  setTimeout(() => {
-    if (micActive && !isRecognitionRunning) startListening();
-  }, 1000);
+  
+  if (micActive) {
+    setTimeout(startListening, 500);
+  }
 }
 
 // === SUBMIT MESSAGE ===
@@ -537,54 +497,11 @@ async function submitMessage(text) {
     sendBtn.click();
     console.log('Message sent');
     
-    // Extra clearing after send
+    // Clear after send
     await sleep(300);
     textarea.blur();
     textarea.innerHTML = '';
     textarea.textContent = '';
-    
-    // One more clear after another delay
-    await sleep(500);
-    const textareaAgain = document.querySelector('[contenteditable="true"]');
-    if (textareaAgain) {
-      textareaAgain.innerHTML = '';
-      textareaAgain.textContent = '';
-    }
-  } catch (error) {
-    console.error('Submit error:', error);
-  }
-}async function submitMessage(text) {
-  try {
-    const textarea = document.querySelector('[contenteditable="true"]');
-    if (!textarea) return;
-    
-    textarea.innerHTML = '';
-    textarea.focus();
-    textarea.textContent = text;
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    
-    await sleep(200);
-    
-    const sendBtn = document.querySelector('button[aria-label*="Send"]') || 
-                    document.querySelector('button[type="submit"]');
-    if (!sendBtn) return;
-    
-    sendBtn.click();
-    console.log('Message sent');
-    
-    // Extra clearing after send
-    await sleep(300);
-    textarea.blur();
-    textarea.innerHTML = '';
-    textarea.textContent = '';
-    
-    // One more clear after another delay
-    await sleep(500);
-    const textareaAgain = document.querySelector('[contenteditable="true"]');
-    if (textareaAgain) {
-      textareaAgain.innerHTML = '';
-      textareaAgain.textContent = '';
-    }
   } catch (error) {
     console.error('Submit error:', error);
   }
@@ -653,7 +570,6 @@ async function waitForResponseAndRead() {
   
   isProcessing = false;
   triggerDetected = false;
-  lastTranscriptLength = 0;
   
   if (micActive) {
     setMicColor('#d32f2f');
@@ -670,7 +586,7 @@ function getBestVoice() {
   console.log(`Browser: ${isEdge ? 'Edge' : 'Chrome'}`);
   console.log(`Available voices: ${voices.length}`);
   
-  // Log all English voices for debugging
+  // Log English voices for debugging
   voices.forEach((v, i) => {
     if (v.lang.startsWith('en')) {
       console.log(`  ${i}: ${v.name} (${v.lang})${v.localService ? '' : ' [cloud]'}`);
@@ -679,7 +595,7 @@ function getBestVoice() {
   
   let selectedVoiceObj = null;
   
-  // Check if user has a saved voice preference (and it's not 'auto')
+  // Check for saved voice preference
   if (selectedVoice && selectedVoice !== 'auto') {
     selectedVoiceObj = voices.find(v => v.name === selectedVoice);
     if (selectedVoiceObj) {
@@ -692,13 +608,9 @@ function getBestVoice() {
   
   // Auto-select best voice for browser
   if (isEdge) {
-    // Edge: Look for Liam first (user's preferred voice)
-    selectedVoiceObj = voices.find(v => 
-      v.name.includes('Liam')
-    );
+    selectedVoiceObj = voices.find(v => v.name.includes('Liam'));
     
     if (!selectedVoiceObj) {
-      // Fallback to other premium Microsoft Azure voices
       selectedVoiceObj = voices.find(v => 
         v.name.includes('Microsoft') && 
         (v.name.includes('Aria') || v.name.includes('Jenny') || v.name.includes('Guy'))
@@ -706,38 +618,30 @@ function getBestVoice() {
     }
     
     if (!selectedVoiceObj) {
-      // Final fallback to any good Microsoft voice
       selectedVoiceObj = voices.find(v => 
         v.name.includes('Microsoft') && 
         v.lang.startsWith('en') &&
-        !v.name.includes('David') && // Skip older voices
+        !v.name.includes('David') &&
         !v.name.includes('Zira')
       );
     }
   } else {
-    // Chrome: Look for Google UK English Male first (user preference)
-    selectedVoiceObj = voices.find(v => 
-      v.name.includes('Google UK English Male')
-    );
+    selectedVoiceObj = voices.find(v => v.name.includes('Google UK English Male'));
     
     if (!selectedVoiceObj) {
-      // Fallback to any Google US English voice
       selectedVoiceObj = voices.find(v => 
-        v.name.includes('Google') && 
-        v.lang === 'en-US'
+        v.name.includes('Google') && v.lang === 'en-US'
       );
     }
     
     if (!selectedVoiceObj) {
-      // Fallback to any decent system voice
       selectedVoiceObj = voices.find(v => 
-        v.lang.startsWith('en') && 
-        v.localService
+        v.lang.startsWith('en') && v.localService
       );
     }
   }
   
-  // Final fallback: First English voice
+  // Final fallback
   if (!selectedVoiceObj) {
     selectedVoiceObj = voices.find(v => v.lang.startsWith('en'));
   }
@@ -777,7 +681,6 @@ function readResponse(text) {
     const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.rate = readbackSpeed;
     
-    // Use smart voice selection
     const bestVoice = getBestVoice();
     if (bestVoice) utterance.voice = bestVoice;
     
@@ -811,7 +714,7 @@ function sleep(ms) {
 function loadSettings() {
   chrome.storage.local.get({
     readbackSpeed: 1.5,
-    readbackEnabled: false, // Default OFF
+    readbackEnabled: false,
     hotkeyEnabled: true,
     triggerPhrase: 'send it',
     selectedHotkey: 'alt',
@@ -832,7 +735,7 @@ function loadSettings() {
       selectedVoice 
     });
     
-    // Update speaker button to match loaded setting
+    // Update speaker button
     const speaker = document.getElementById('vf-speaker');
     if (speaker) {
       const speakerOnSVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
@@ -855,7 +758,7 @@ function init() {
   loadSettings();
   initRecognition();
   
-  // Create panel and add all elements to it
+  // Create panel
   const panel = createGlassPanel();
   panel.appendChild(createLogoText());
   panel.appendChild(createMicButton());
